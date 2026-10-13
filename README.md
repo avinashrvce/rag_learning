@@ -6,7 +6,7 @@ the indexed document.
 
 ## How it works
 
-1. `ingest.py` loads `Documents/sample.pdf.pdf` and extracts its pages.
+1. `ingest.py` loads `Documents/sample.pdf` and extracts its pages.
 2. The page text is split into chunks of up to 1,000 characters, with 200
    characters of overlap.
 3. Gemini embeddings are generated for the chunks and stored in the local
@@ -62,6 +62,16 @@ python rag.py
 ```
 
 Enter a question at the prompt. Type `exit` or `quit` to stop.
+
+For a browser-based interface with PDF upload, indexing progress, chat history,
+and source excerpts, run:
+
+```powershell
+streamlit run streamlit_app.py
+```
+
+You can also upload and index PDFs directly from the interface; they are added
+to the same local Chroma knowledge base.
 
 ## Configuration and notes
 

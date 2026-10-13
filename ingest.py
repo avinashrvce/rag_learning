@@ -2,6 +2,7 @@
 import hashlib
 import os
 from pathlib import Path
+from typing import Callable
 
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
@@ -10,22 +11,26 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 PROJECT_DIR = Path(__file__).resolve().parent
-PDF_PATH = PROJECT_DIR / "Documents" / "sample.pdf.pdf"
+PDF_PATH = PROJECT_DIR / "Documents" / "sample.pdf"
 DB_PATH = PROJECT_DIR / "chroma_db"
 COLLECTION_NAME = "rag_documents"
 
 
-def main() -> None:
+def ingest_pdf(
+    pdf_path: Path = PDF_PATH,
+    source_name: str | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> int:
     load_dotenv(PROJECT_DIR / ".env")
 
     if not os.getenv("GOOGLE_API_KEY", "").strip():
         raise ValueError("GOOGLE_API_KEY is missing from .env")
 
-    if not PDF_PATH.is_file():
-        raise FileNotFoundError(f"PDF not found: {PDF_PATH}")
+    if not pdf_path.is_file():
+        raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
     print("Loading PDF...")
-    loader = PyPDFLoader(str(PDF_PATH))
+    loader = PyPDFLoader(str(pdf_path))
     documents = loader.load()
     print(f"Pages loaded: {len(documents)}")
 
@@ -45,6 +50,10 @@ def main() -> None:
     if not chunks:
         raise ValueError("No extractable text found in PDF.")
 
+    if source_name:
+        for chunk in chunks:
+            chunk.metadata["source"] = source_name
+
     print("Initializing Gemini embeddings...")
     embeddings = GoogleGenerativeAIEmbeddings(
         model="models/gemini-embedding-001"
@@ -57,7 +66,7 @@ def main() -> None:
         persist_directory=str(DB_PATH),
     )
 
-    pdf_hash = hashlib.sha256(PDF_PATH.read_bytes()).hexdigest()[:16]
+    pdf_hash = hashlib.sha256(pdf_path.read_bytes()).hexdigest()[:16]
     ids = [f"{pdf_hash}-chunk-{i}" for i in range(len(chunks))]
 
     batch_size = 20
@@ -68,10 +77,17 @@ def main() -> None:
             ids=ids[start:end],
         )
         print(f"Indexed {min(end, len(chunks))}/{len(chunks)} chunks")
+        if progress_callback:
+            progress_callback(min(end, len(chunks)), len(chunks))
 
     print("\nIngestion completed successfully!")
     print(f"Total stored vectors: {vectorstore._collection.count()}")
     print(f"Database location: {DB_PATH}")
+    return len(chunks)
+
+
+def main() -> None:
+    ingest_pdf()
 
 
 if __name__ == "__main__":
